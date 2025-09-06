@@ -66,16 +66,15 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
 
 // ** Main New Tab Logic **
 chrome.tabs.onCreated.addListener((tab) => {
-  // Get the currently active tab in the same window
-  const activeTabId = activeTabIds.get(tab.windowId);
-  
-  if (!activeTabId || tab.id === activeTabId) {
-    return; // No active tab to reference or the new tab is already active
+  // Skip if this new tab is already the active tab (shouldn't happen, but safety check)
+  const cachedActiveTabId = activeTabIds.get(tab.windowId);
+  if (tab.id === cachedActiveTabId) {
+    return;
   }
   
   // Check if this is a new tab without a meaningful URL (cmd-t case)
   if (!tab.url || tab.url === 'chrome://newtab/') {
-    // This is likely a cmd-t new tab, position it immediately
+    // This is a new tab, position it immediately
     positionTabToRightOfActive(tab.id, tab.windowId);
     return;
   }
@@ -107,13 +106,39 @@ chrome.tabs.onCreated.addListener((tab) => {
 
 // Helper function to position a tab to the right of the currently active tab
 function positionTabToRightOfActive(tabId, windowId) {
-  const activeTabId = activeTabIds.get(windowId);
-  if (!activeTabId) return;
+  // First try the cached active tab ID
+  const cachedActiveTabId = activeTabIds.get(windowId);
   
-  chrome.tabs.get(activeTabId, (activeTab) => {
-    if (chrome.runtime.lastError) {
-      return; // Active tab might have been closed
+  if (cachedActiveTabId) {
+    chrome.tabs.get(cachedActiveTabId, (activeTab) => {
+      if (chrome.runtime.lastError || !activeTab) {
+        // Cache is stale, fallback to querying for active tab
+        queryAndPositionTab(tabId, windowId);
+        return;
+      }
+      
+      // Move the new tab to the right of the currently active tab
+      const newIndex = activeTab.index + 1;
+      chrome.tabs.move(tabId, { 
+        index: newIndex 
+      });
+    });
+  } else {
+    // No cached active tab, query for it
+    queryAndPositionTab(tabId, windowId);
+  }
+}
+
+// Helper function to query for active tab and position new tab
+function queryAndPositionTab(tabId, windowId) {
+  chrome.tabs.query({ active: true, windowId: windowId }, (activeTabs) => {
+    if (chrome.runtime.lastError || !activeTabs || activeTabs.length === 0) {
+      return;
     }
+    
+    const activeTab = activeTabs[0];
+    // Update our cache while we're at it
+    activeTabIds.set(windowId, activeTab.id);
     
     // Move the new tab to the right of the currently active tab
     const newIndex = activeTab.index + 1;
