@@ -95,7 +95,7 @@ chrome.tabs.onCreated.addListener((tab) => {
           index: restoredTabInfo.index 
         });
         recentlyClosedTabs.delete(`${updatedTab.url}_${tab.windowId}`);
-      } else if (tab.openerTabId !== undefined) {
+      } else if (updatedTab.openerTabId !== undefined) {
         // For cmd-click tabs, position to the right of active tab
         positionTabToRightOfActive(tab.id, tab.windowId);
       }
